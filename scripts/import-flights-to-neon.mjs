@@ -83,8 +83,8 @@ try {
   const schema = fs.readFileSync(schemaPath, 'utf8')
 
   await client.query('BEGIN')
+  await client.query('DROP TABLE IF EXISTS flights CASCADE')
   await client.query(schema)
-  await client.query('TRUNCATE TABLE flights')
 
   const values = []
   const placeholders = rows.map((row, rowIndex) => {
