@@ -1,21 +1,23 @@
 import { useState } from 'react'
 import './App.css'
 
-const origins = [
-  { value: '台北 (TPE)', city: '台北', airport: 'TPE' },
-  { value: '高雄 (KHH)', city: '高雄', airport: 'KHH' },
+const taiwanAirports = [
+  { value: '台北 (TPE)', city: '台北', airport: 'TPE', basePrice: 0, duration: '3h 15m' },
+  { value: '高雄 (KHH)', city: '高雄', airport: 'KHH', basePrice: 650, duration: '3h 25m' },
 ]
 
-const destinations = [
-  { value: '東京 (NRT/HND)', city: '東京', airport: 'NRT', basePrice: 7980, duration: '3 小時 15 分' },
-  { value: '大阪 (KIX)', city: '大阪', airport: 'KIX', basePrice: 7380, duration: '2 小時 50 分' },
-  { value: '沖繩 (OKA)', city: '沖繩', airport: 'OKA', basePrice: 5680, duration: '1 小時 40 分' },
-  { value: '福岡 (FUK)', city: '福岡', airport: 'FUK', basePrice: 6880, duration: '2 小時 20 分' },
-  { value: '札幌 (CTS)', city: '札幌', airport: 'CTS', basePrice: 10800, duration: '4 小時 05 分' },
-  { value: '名古屋 (NGO)', city: '名古屋', airport: 'NGO', basePrice: 7680, duration: '3 小時' },
-  { value: '熊本 (KMJ)', city: '熊本', airport: 'KMJ', basePrice: 7180, duration: '2 小時 25 分' },
-  { value: '仙台 (SDJ)', city: '仙台', airport: 'SDJ', basePrice: 9280, duration: '3 小時 40 分' },
+const japanAirports = [
+  { value: '東京 (NRT)', city: '東京', airport: 'NRT', basePrice: 7980, duration: '3h 15m' },
+  { value: '大阪 (KIX)', city: '大阪', airport: 'KIX', basePrice: 7380, duration: '2h 50m' },
+  { value: '沖繩 (OKA)', city: '沖繩', airport: 'OKA', basePrice: 5680, duration: '1h 40m' },
+  { value: '福岡 (FUK)', city: '福岡', airport: 'FUK', basePrice: 6880, duration: '2h 20m' },
+  { value: '札幌 (CTS)', city: '札幌', airport: 'CTS', basePrice: 10800, duration: '4h 05m' },
+  { value: '名古屋 (NGO)', city: '名古屋', airport: 'NGO', basePrice: 7680, duration: '3h' },
+  { value: '熊本 (KMJ)', city: '熊本', airport: 'KMJ', basePrice: 7180, duration: '2h 25m' },
+  { value: '仙台 (SDJ)', city: '仙台', airport: 'SDJ', basePrice: 9280, duration: '3h 40m' },
 ]
+
+const airportOptions = [...taiwanAirports, ...japanAirports]
 
 const fallbackAirlines = [
   { airline: '中華航空', codePrefix: 'CI', depart: '08:10', arrive: '12:25', priceOffset: 520 },
@@ -25,19 +27,19 @@ const fallbackAirlines = [
   { airline: '星宇航空', codePrefix: 'JX', depart: '15:10', arrive: '19:30', priceOffset: 920 },
 ]
 
-function PlaneIcon({ className = '' }) {
+const maxBudget = 90000
+
+function JapanFlagIcon({ className = '' }) {
   return (
-    <svg aria-hidden="true" className={className} viewBox="0 0 24 24">
-      <path
-        d="M21.5 3.7c.7.7.5 1.9-.4 2.4l-5.6 3.4 2 8.2c.1.5-.1 1-.6 1.2l-1.2.6c-.5.2-1 .1-1.3-.4l-3.7-6.5-4.1 2.5-.4 2.8c-.1.4-.3.7-.6.9l-.9.5c-.5.3-1.1 0-1.2-.6l-.8-4.3-3.2-3c-.4-.4-.3-1.1.2-1.4l.9-.5c.3-.2.7-.2 1 0l2.6 1.1 4.1-2.5-3.9-6.4c-.3-.5-.2-1 .3-1.3L5.8.1c.5-.2 1-.1 1.3.3l5.9 6 5.7-3.3c.9-.5 2-.3 2.8.6Z"
-        fill="currentColor"
-      />
+    <svg aria-hidden="true" className={className} viewBox="0 0 36 24">
+      <rect width="36" height="24" rx="3" fill="#ffffff" />
+      <circle cx="18" cy="12" r="6" fill="#bc002d" />
     </svg>
   )
 }
 
-function findOption(options, value) {
-  return options.find((option) => option.value === value) ?? options[0]
+function findAirport(value) {
+  return airportOptions.find((option) => option.value === value) ?? airportOptions[0]
 }
 
 function getCabinClass(cabin) {
@@ -46,53 +48,144 @@ function getCabinClass(cabin) {
   return 'economy'
 }
 
-function buildFallbackFlights({ origin, destination, cabin, budget, nonstopOnly }) {
+function getTripDuration(departDate, returnDate) {
+  if (!departDate || !returnDate) return ''
+  const depart = new Date(`${departDate}T00:00:00`)
+  const returning = new Date(`${returnDate}T00:00:00`)
+  const days = Math.round((returning - depart) / 86400000)
+  if (Number.isNaN(days) || days < 0) return ''
+  return `${days + 1} 天 ${days} 夜`
+}
+
+function getRoutePricing(origin, destination) {
+  const japanAirport = japanAirports.find((airport) =>
+    [origin.airport, destination.airport].includes(airport.airport),
+  )
+  const taiwanAirport = taiwanAirports.find((airport) =>
+    [origin.airport, destination.airport].includes(airport.airport),
+  )
+
+  return {
+    basePrice: japanAirport?.basePrice ?? 7800,
+    duration: japanAirport?.duration ?? '3h',
+    originOffset: taiwanAirport?.airport === 'KHH' ? 650 : 0,
+  }
+}
+
+function buildFallbackFlights({ origin, destination, cabin, date, direction = 'outbound' }) {
   const cabinMultiplier = cabin === '商務艙' ? 2.8 : cabin === '豪華經濟艙' ? 1.55 : 1
-  const originPriceOffset = origin.airport === 'KHH' ? 650 : 0
-  const destinationIndex = destinations.findIndex((item) => item.value === destination.value)
+  const pricing = getRoutePricing(origin, destination)
 
   return fallbackAirlines
     .map((flight, index) => {
       const priceTwd = Math.round(
-        ((destination.basePrice + originPriceOffset + flight.priceOffset) * cabinMultiplier) / 10,
+        ((pricing.basePrice + pricing.originOffset + flight.priceOffset) * cabinMultiplier) / 10,
       ) * 10
-      const isNonstop = index !== 3
 
       return {
-        flightId: `fallback-${flight.codePrefix}-${index}`,
+        flightId: `fallback-${direction}-${flight.codePrefix}-${index}`,
         airline: flight.airline,
-        code: `${flight.codePrefix}${destinationIndex + 2}${origin.airport === 'KHH' ? '7' : '1'}${index + 6}`,
+        airlineCode: flight.codePrefix,
+        code: `${flight.codePrefix}${origin.airport === 'KHH' ? '7' : '1'}${index + 26}`,
         route: `${origin.airport} 到 ${destination.airport}`,
-        flightDate: '預估航班',
+        flightDate: date || '彈性日期',
         time: `${flight.depart} - ${flight.arrive}`,
-        duration: destination.duration,
-        stops: isNonstop ? '直飛' : '轉機 1 次',
+        duration: pricing.duration,
+        stops: index === 3 ? '轉機 1 次' : '直飛',
         priceTwd,
         price: `NT$ ${priceTwd.toLocaleString()}`,
       }
     })
-    .filter((flight) => flight.priceTwd <= budget)
-    .filter((flight) => !nonstopOnly || flight.stops === '直飛')
     .sort((first, second) => first.priceTwd - second.priceTwd)
+}
+
+function formatTotalPrice(outbound, returning) {
+  const total = Number(outbound?.priceTwd ?? 0) + Number(returning?.priceTwd ?? 0)
+  return `NT$ ${total.toLocaleString()}`
+}
+
+function FlightLine({ flight, label }) {
+  return (
+    <div className="flight-line">
+      <span className="flight-line-label">{label}</span>
+      <div>
+        <h4>
+          {flight.airline} {flight.code}
+        </h4>
+        <p>
+          {flight.flightDate} · {flight.route} · {flight.time} · {flight.duration} · {flight.stops}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function RoundTripResults({ outboundFlights, returnFlights }) {
+  const pairCount = Math.min(outboundFlights.length, returnFlights.length)
+
+  if (pairCount === 0) {
+    return <div className="empty-results">目前沒有完整的去回程組合，請調整日期或目的地後再試一次。</div>
+  }
+
+  return (
+    <div className="results-list">
+      {Array.from({ length: pairCount }).map((_, index) => {
+        const outbound = outboundFlights[index]
+        const returning = returnFlights[index]
+
+        return (
+          <article className="flight-result-card roundtrip-card" key={`${outbound.flightId}-${returning.flightId}`}>
+            <div className="roundtrip-lines">
+              <FlightLine flight={outbound} label="去程" />
+              <FlightLine flight={returning} label="回程" />
+            </div>
+            <div className="total-price">
+              <span>來回總價</span>
+              <strong>{formatTotalPrice(outbound, returning)}</strong>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function OneWayResults({ flights }) {
+  if (flights.length === 0) {
+    return <div className="empty-results">目前沒有符合條件的航班，請調整日期或目的地後再試一次。</div>
+  }
+
+  return (
+    <div className="results-list">
+      {flights.map((flight) => (
+        <article className="flight-result-card" key={flight.flightId}>
+          <div>
+            <h4>
+              {flight.airline} {flight.code}
+            </h4>
+            <p>
+              {flight.flightDate} · {flight.route} · {flight.time} · {flight.duration} · {flight.stops}
+            </p>
+          </div>
+          <strong>{flight.price}</strong>
+        </article>
+      ))}
+    </div>
+  )
 }
 
 function App() {
   const [tripType, setTripType] = useState('來回')
   const [cabin, setCabin] = useState('經濟艙')
-  const [budget, setBudget] = useState(36000)
-  const [nonstopOnly, setNonstopOnly] = useState(true)
-  const [nearbyOrigin, setNearbyOrigin] = useState(false)
-  const [nearbyDestination, setNearbyDestination] = useState(false)
-  const [bundleHotel, setBundleHotel] = useState(true)
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
-  const [flightResults, setFlightResults] = useState([])
+  const [tripResults, setTripResults] = useState({ outboundFlights: [], returnFlights: [] })
   const [showAllResults, setShowAllResults] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [searchNotice, setSearchNotice] = useState('')
   const [searchForm, setSearchForm] = useState({
     from: '高雄 (KHH)',
-    to: '東京 (NRT/HND)',
+    to: '東京 (NRT)',
     departDate: '',
     returnDate: '',
     travelers: '1 位成人',
@@ -104,12 +197,32 @@ function App() {
     setSearchForm((current) => ({ ...current, [field]: value }))
   }
 
+  function swapAirports() {
+    setSearchError('')
+    setSearchNotice('')
+    setSearchForm((current) => ({
+      ...current,
+      from: current.to,
+      to: current.from,
+    }))
+  }
+
   async function handleSearch(event) {
     event.preventDefault()
 
+    if (searchForm.from === searchForm.to) {
+      setSearchError('出發地和目的地不能相同。')
+      return
+    }
+
+    if (tripType === '來回' && !searchForm.returnDate) {
+      setSearchError('請選擇回程日期，才能搜尋來回航班。')
+      return
+    }
+
     if (tripType === '來回' && searchForm.departDate && searchForm.returnDate) {
       if (searchForm.departDate > searchForm.returnDate) {
-        setFlightResults([])
+        setTripResults({ outboundFlights: [], returnFlights: [] })
         setHasSearched(false)
         setSearchError('回程日期不能早於出發日期。')
         return
@@ -122,17 +235,19 @@ function App() {
     setIsSearching(true)
     setHasSearched(false)
 
-    const origin = findOption(origins, searchForm.from)
-    const destination = findOption(destinations, searchForm.to)
+    const origin = findAirport(searchForm.from)
+    const destination = findAirport(searchForm.to)
 
     try {
       const params = new URLSearchParams({
         from: origin.airport,
         to: destination.airport,
         departDate: searchForm.departDate || '2026-08-12',
+        returnDate: searchForm.returnDate,
+        tripType: tripType === '來回' ? 'roundtrip' : 'oneway',
         cabinClass: getCabinClass(cabin),
-        nonstopOnly: String(nonstopOnly),
-        budget: String(budget),
+        nonstopOnly: 'false',
+        budget: String(maxBudget),
       })
       const response = await fetch(`/api/flights?${params.toString()}`)
 
@@ -141,10 +256,33 @@ function App() {
       }
 
       const data = await response.json()
-      setFlightResults(data.flights ?? [])
+      setTripResults({
+        outboundFlights: data.outboundFlights ?? data.flights ?? [],
+        returnFlights: data.returnFlights ?? [],
+      })
       setHasSearched(true)
+
+      if (data.returnFlightsAreEstimated) {
+        setSearchNotice('目前資料庫沒有反向回程航班，回程先以預估航班顯示。')
+      }
     } catch {
-      setFlightResults(buildFallbackFlights({ origin, destination, cabin, budget, nonstopOnly }))
+      setTripResults({
+        outboundFlights: buildFallbackFlights({
+          origin,
+          destination,
+          cabin,
+          date: searchForm.departDate,
+        }),
+        returnFlights: tripType === '來回'
+          ? buildFallbackFlights({
+              origin: destination,
+              destination: origin,
+              cabin,
+              date: searchForm.returnDate,
+              direction: 'return',
+            })
+          : [],
+      })
       setHasSearched(true)
       setSearchNotice('目前使用預估票價示範結果；啟動後端 API 後會改用資料庫航班。')
     } finally {
@@ -152,38 +290,34 @@ function App() {
     }
   }
 
-  const visibleFlightResults = showAllResults ? flightResults : flightResults.slice(0, 5)
-  const hiddenFlightCount = Math.max(0, flightResults.length - visibleFlightResults.length)
+  const outboundVisible = showAllResults
+    ? tripResults.outboundFlights
+    : tripResults.outboundFlights.slice(0, 5)
+  const returnVisible = showAllResults
+    ? tripResults.returnFlights
+    : tripResults.returnFlights.slice(0, 5)
+  const visiblePairCount = tripType === '來回'
+    ? Math.min(outboundVisible.length, returnVisible.length)
+    : outboundVisible.length
+  const totalResultCount = tripType === '來回'
+    ? Math.min(tripResults.outboundFlights.length, tripResults.returnFlights.length)
+    : tripResults.outboundFlights.length
+  const hiddenFlightCount = Math.max(0, totalResultCount - visiblePairCount)
+  const tripDuration = getTripDuration(searchForm.departDate, searchForm.returnDate)
 
   return (
     <div className="app-shell">
       <header className="topbar" aria-label="AirScan">
         <a className="brand" href="#search" aria-label="AirScan 首頁">
           <span className="brand-mark">
-            <PlaneIcon />
+            <JapanFlagIcon />
           </span>
           <span>AirScan</span>
         </a>
-        <nav className="top-actions" aria-label="主要導覽">
-          <a href="#about">說明頁面</a>
-          <button aria-label="語言與地區" type="button">🌐</button>
-          <button aria-label="收藏航班" type="button">♥</button>
-        </nav>
       </header>
 
       <main>
         <section className="hero" id="search">
-          <div className="product-tabs" role="tablist" aria-label="搜尋類型">
-            <button className="product-tab active" type="button">
-              <PlaneIcon />
-              航班
-            </button>
-            <button className="product-tab" type="button">▰ 住宿</button>
-            <button className="product-tab" type="button">▱ 租車</button>
-          </div>
-
-          <h1>一鍵搜尋，數百萬個便宜航班輕鬆網羅。</h1>
-
           <form className="search-area" onSubmit={handleSearch}>
             <div className="trip-row">
               {['來回', '單程'].map((type) => (
@@ -205,15 +339,15 @@ function App() {
                   onChange={(event) => updateSearchForm('from', event.target.value)}
                   value={searchForm.from}
                 >
-                  {origins.map((origin) => (
-                    <option key={origin.value} value={origin.value}>
-                      {origin.value}
+                  {airportOptions.map((airport) => (
+                    <option key={airport.value} value={airport.value}>
+                      {airport.value}
                     </option>
                   ))}
                 </select>
               </label>
 
-              <button className="swap-button" type="button" aria-label="交換出發地與目的地">
+              <button className="swap-button" type="button" aria-label="交換出發地與目的地" onClick={swapAirports}>
                 ⇄
               </button>
 
@@ -223,9 +357,9 @@ function App() {
                   onChange={(event) => updateSearchForm('to', event.target.value)}
                   value={searchForm.to}
                 >
-                  {destinations.map((destination) => (
-                    <option key={destination.value} value={destination.value}>
-                      {destination.value}
+                  {airportOptions.map((airport) => (
+                    <option key={airport.value} value={airport.value}>
+                      {airport.value}
                     </option>
                   ))}
                 </select>
@@ -267,41 +401,6 @@ function App() {
               </button>
             </div>
 
-            <div className="option-row">
-              <label>
-                <input
-                  checked={nearbyOrigin}
-                  onChange={(event) => setNearbyOrigin(event.target.checked)}
-                  type="checkbox"
-                />
-                新增鄰近機場
-              </label>
-              <label>
-                <input
-                  checked={nearbyDestination}
-                  onChange={(event) => setNearbyDestination(event.target.checked)}
-                  type="checkbox"
-                />
-                新增鄰近機場
-              </label>
-              <label>
-                <input
-                  checked={nonstopOnly}
-                  onChange={(event) => setNonstopOnly(event.target.checked)}
-                  type="checkbox"
-                />
-                直飛航班
-              </label>
-              <label>
-                <input
-                  checked={bundleHotel}
-                  onChange={(event) => setBundleHotel(event.target.checked)}
-                  type="checkbox"
-                />
-                一併搜尋住宿
-              </label>
-            </div>
-
             <div className="filters-row">
               <label>
                 艙等
@@ -310,17 +409,6 @@ function App() {
                   <option>豪華經濟艙</option>
                   <option>商務艙</option>
                 </select>
-              </label>
-              <label className="budget-filter">
-                預算 NT$ {budget.toLocaleString()}
-                <input
-                  max="90000"
-                  min="12000"
-                  onChange={(event) => setBudget(Number(event.target.value))}
-                  step="2000"
-                  type="range"
-                  value={budget}
-                />
               </label>
             </div>
 
@@ -337,53 +425,29 @@ function App() {
                 {searchForm.from} 到 {searchForm.to}
               </h2>
               <span>
-                {searchForm.departDate || '彈性日期'}
-                {tripType === '來回' && searchForm.returnDate ? ` - ${searchForm.returnDate}` : ''}，
-                {searchForm.travelers}，{cabin}
+                去程 {searchForm.departDate || '彈性日期'}
+                {tripType === '來回' && `，回程 ${searchForm.returnDate || '未選擇'}`}
+                {tripDuration && `，期間 ${tripDuration}`}，{searchForm.travelers}，{cabin}
               </span>
             </div>
 
-            {flightResults.length === 0 ? (
-              <div className="empty-results">目前沒有符合條件的航班，試著提高預算或關閉直飛篩選。</div>
+            {tripType === '來回' ? (
+              <RoundTripResults outboundFlights={outboundVisible} returnFlights={returnVisible} />
             ) : (
-              <div className="results-list">
-                {visibleFlightResults.map((flight) => (
-                  <article className="flight-result-card" key={flight.flightId}>
-                    <div>
-                      <h3>
-                        {flight.airline} {flight.code}
-                      </h3>
-                      <p>
-                        {flight.flightDate} · {flight.route} · {flight.time} · {flight.duration} ·{' '}
-                        {flight.stops}
-                      </p>
-                    </div>
-                    <strong>{flight.price}</strong>
-                  </article>
-                ))}
-                {flightResults.length > 5 && (
-                  <button
-                    className="results-toggle"
-                    onClick={() => setShowAllResults((current) => !current)}
-                    type="button"
-                  >
-                    {showAllResults ? '收合結果' : `顯示另外 ${hiddenFlightCount} 筆航班`}
-                  </button>
-                )}
-              </div>
+              <OneWayResults flights={outboundVisible} />
+            )}
+
+            {hiddenFlightCount > 0 && (
+              <button
+                className="results-toggle"
+                onClick={() => setShowAllResults((current) => !current)}
+                type="button"
+              >
+                {showAllResults ? '收合結果' : `顯示另外 ${hiddenFlightCount} 組方案`}
+              </button>
             )}
           </section>
         )}
-
-        <section className="info-band" id="about">
-          <div>
-            <p>AirScan</p>
-            <h2>快速比較台灣飛日本航班</h2>
-          </div>
-          <p>
-            以價格、直飛與艙等條件快速掃描航班清單，讓查票頁面先把重要資訊排整齊。
-          </p>
-        </section>
       </main>
     </div>
   )

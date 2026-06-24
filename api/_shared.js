@@ -71,7 +71,7 @@ export function mapFlight(row) {
     airline: row.airline_name,
     airlineCode: row.airline_code,
     code: row.flight_number,
-    route: `${row.origin_airport_code} → ${row.destination_airport_code}`,
+    route: `${row.origin_airport_code} 到 ${row.destination_airport_code}`,
     flightDate: String(row.flight_date).slice(0, 10),
     time: `${String(row.departure_time).slice(0, 5)} - ${String(row.arrival_time).slice(0, 5)}`,
     durationMinutes: Number(row.duration_minutes),
@@ -127,17 +127,64 @@ export function queryCsvFlights(filters) {
     .filter((flight) => Number(flight.price_twd) <= filters.budget)
     .sort((first, second) => {
       const dateCompare = first.flight_date.localeCompare(second.flight_date)
-      if (dateCompare !== 0) {
-        return dateCompare
-      }
+      if (dateCompare !== 0) return dateCompare
 
       const priceCompare = Number(first.price_twd) - Number(second.price_twd)
-      if (priceCompare !== 0) {
-        return priceCompare
-      }
+      if (priceCompare !== 0) return priceCompare
 
       return first.departure_time.localeCompare(second.departure_time)
     })
     .slice(0, 30)
     .map(mapFlight)
+}
+
+function createSyntheticReturnFlights(outboundFlights, filters) {
+  return outboundFlights.slice(0, 10).map((flight, index) => {
+    const [departTime, arriveTime] = flight.time.split(' - ')
+    const adjustedPrice = Math.round((flight.priceTwd * (1.03 + index * 0.015)) / 10) * 10
+
+    return {
+      ...flight,
+      flightId: `return-${flight.flightId}-${index}`,
+      code: `${flight.airlineCode ?? 'RT'}${String(700 + index).padStart(3, '0')}`,
+      route: `${filters.to} 到 ${filters.from}`,
+      flightDate: filters.departDate,
+      time: `${departTime} - ${arriveTime}`,
+      priceTwd: adjustedPrice,
+      price: `NT$ ${adjustedPrice.toLocaleString()}`,
+      synthetic: true,
+    }
+  })
+}
+
+export async function queryFlights(filters) {
+  return hasDatabaseUrl() ? queryDatabaseFlights(filters) : queryCsvFlights(filters)
+}
+
+export async function queryTripFlights(filters) {
+  const outboundFlights = await queryFlights(filters)
+
+  if (filters.tripType !== 'roundtrip') {
+    return {
+      outboundFlights,
+      returnFlights: [],
+      returnFlightsAreEstimated: false,
+    }
+  }
+
+  const returnFilters = {
+    ...filters,
+    from: filters.to,
+    to: filters.from,
+    departDate: filters.returnDate,
+  }
+  const reverseFlights = await queryFlights(returnFilters)
+
+  return {
+    outboundFlights,
+    returnFlights: reverseFlights.length > 0
+      ? reverseFlights
+      : createSyntheticReturnFlights(outboundFlights, returnFilters),
+    returnFlightsAreEstimated: reverseFlights.length === 0,
+  }
 }

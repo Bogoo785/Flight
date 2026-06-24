@@ -1,8 +1,7 @@
 import {
   hasDatabaseUrl,
   normalizeBoolean,
-  queryCsvFlights,
-  queryDatabaseFlights,
+  queryTripFlights,
 } from './_shared.js'
 
 export default async function handler(req, res) {
@@ -16,6 +15,8 @@ export default async function handler(req, res) {
     from: String(req.query.from ?? ''),
     to: String(req.query.to ?? ''),
     departDate: String(req.query.departDate ?? ''),
+    returnDate: String(req.query.returnDate ?? ''),
+    tripType: String(req.query.tripType ?? 'oneway'),
     cabinClass: String(req.query.cabinClass ?? 'economy'),
     nonstopOnly: normalizeBoolean(req.query.nonstopOnly),
     budget: Number(req.query.budget ?? 999999),
@@ -26,15 +27,20 @@ export default async function handler(req, res) {
     return
   }
 
+  if (filters.tripType === 'roundtrip' && !filters.returnDate) {
+    res.status(400).json({ error: 'returnDate is required for roundtrip searches' })
+    return
+  }
+
   try {
-    const flights = hasDatabaseUrl()
-      ? await queryDatabaseFlights(filters)
-      : queryCsvFlights(filters)
+    const tripResults = await queryTripFlights(filters)
+    const flights = tripResults.outboundFlights
 
     res.status(200).json({
       dataSource: hasDatabaseUrl() ? 'neon' : 'local_csv',
       count: flights.length,
       flights,
+      ...tripResults,
     })
   } catch (error) {
     console.error(error)
