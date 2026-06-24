@@ -189,6 +189,26 @@
   color: #0f172a;
 }
 
+.cheap-days-button {
+  border: 1px solid rgba(153, 246, 228, 0.7);
+  border-radius: 8px;
+  background: rgba(153, 246, 228, 0.16);
+  color: #e6fffa;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.cheap-days-button:hover,
+.cheap-days-button:focus-visible {
+  background: rgba(94, 234, 212, 0.26);
+}
+
+.cheap-days-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
 .form-error,
 .form-notice {
   max-width: 760px;
@@ -346,6 +366,158 @@
   text-align: center;
 }
 
+.ai-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  border: 1px solid #d5e7ea;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px 18px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+}
+
+.ai-panel-main {
+  max-width: 980px;
+  margin: 26px auto 0;
+}
+
+.ai-panel p {
+  margin: 0 0 4px;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ai-panel h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.ai-panel span {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ai-chat-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ai-chat-form textarea {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  border: 1px solid #d5e7ea;
+  border-radius: 8px;
+  background: #f8fbfc;
+  color: #0f172a;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+  padding: 10px 12px;
+}
+
+.ai-chat-form textarea:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
+}
+
+.ai-chat-form textarea:disabled {
+  color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.ai-button {
+  min-height: 78px;
+  border: 0;
+  border-radius: 8px;
+  background: #14b8a6;
+  color: #062b37;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 0 18px;
+}
+
+.ai-button:hover,
+.ai-button:focus-visible {
+  background: #5eead4;
+}
+
+.ai-button:disabled {
+  background: #b7d8d5;
+  cursor: not-allowed;
+}
+
+.ai-error,
+.ai-recommendation {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ai-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.ai-recommendation {
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  color: #0f172a;
+  white-space: pre-wrap;
+}
+
+.cheap-days-panel {
+  grid-column: 1 / -1;
+  border: 1px solid #cfe8ee;
+  border-radius: 8px;
+  background: #f8fbfc;
+  padding: 12px 14px;
+}
+
+.cheap-days-panel h4 {
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.cheap-days-panel ol {
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.cheap-days-panel li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.cheap-days-panel strong {
+  color: #0f172a;
+}
+
 @media (max-width: 1020px) {
   .search-grid {
     grid-template-columns: 1fr 1fr;
@@ -437,5 +609,18 @@
     border-top: 1px solid #d5e7ea;
     padding-left: 0;
     padding-top: 12px;
+  }
+
+  .ai-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-chat-form {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-button {
+    width: 100%;
+    min-height: 44px;
   }
 }

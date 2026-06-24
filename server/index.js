@@ -6,6 +6,7 @@ import {
   normalizeBoolean,
   queryTripFlights,
 } from '../api/_shared.js'
+import { getGeminiRecommendation } from '../api/gemini.js'
 
 dotenv.config()
 
@@ -56,6 +57,16 @@ app.get('/api/flights', async (req, res) => {
   } catch (error) {
     console.error(error)
     res.status(500).json({ error: 'Failed to search flights' })
+  }
+})
+
+app.post('/api/gemini', async (req, res) => {
+  try {
+    const recommendation = await getGeminiRecommendation(req.body ?? {})
+    res.json({ recommendation })
+  } catch (error) {
+    console.error(error)
+    res.status(error.statusCode ?? 500).json({ error: 'Failed to get Gemini recommendation' })
   }
 })
 

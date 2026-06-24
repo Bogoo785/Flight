@@ -57,6 +57,121 @@ function getTripDuration(departDate, returnDate) {
   return `${days + 1} 天 ${days} 夜`
 }
 
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function buildDateRange(startDate, endDate, maxDays = 21) {
+  if (!startDate) return []
+
+  const start = new Date(`${startDate}T00:00:00`)
+  const fallbackEnd = addDays(startDate, 14)
+  const safeEndDate = endDate && endDate >= startDate ? endDate : fallbackEnd
+  const end = new Date(`${safeEndDate}T00:00:00`)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return []
+  }
+
+  const days = []
+  const cursor = new Date(start)
+
+  while (cursor <= end && days.length < maxDays) {
+    days.push(cursor.toISOString().slice(0, 10))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  return days
+}
+
+async function fetchCheapestDatesData({ origin, destination, departDate, returnDate, tripTypeCurrent, cabinCurrent }) {
+  const stayNights =
+    returnDate && returnDate >= departDate
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(`${returnDate}T00:00:00`) - new Date(`${departDate}T00:00:00`)) / 86400000,
+          ),
+        )
+      : 3
+
+  const dateRange = buildDateRange(departDate, returnDate)
+
+  const results = await Promise.all(
+    dateRange.map(async (date) => {
+      const query = new URLSearchParams({
+        from: origin.airport,
+        to: destination.airport,
+        departDate: date,
+        tripType: 'oneway',
+        cabinClass: getCabinClass(cabinCurrent),
+        nonstopOnly: 'false',
+        budget: String(maxBudget),
+      })
+
+      const outboundResponse = await fetch(`/api/flights?${query.toString()}`)
+      if (!outboundResponse.ok) return null
+
+      const outboundData = await outboundResponse.json()
+      const outboundFlights = outboundData.outboundFlights ?? outboundData.flights ?? []
+      if (outboundFlights.length === 0) return null
+
+      if (tripTypeCurrent === '單程') {
+        return {
+          departDate: date,
+          totalPriceTwd: Number(outboundFlights[0].priceTwd ?? 0),
+          label: `${date} 出發`,
+        }
+      }
+
+      const retDate = addDays(date, stayNights)
+      const returnQuery = new URLSearchParams({
+        from: destination.airport,
+        to: origin.airport,
+        departDate: retDate,
+        tripType: 'oneway',
+        cabinClass: getCabinClass(cabinCurrent),
+        nonstopOnly: 'false',
+        budget: String(maxBudget),
+      })
+
+      const returnResponse = await fetch(`/api/flights?${returnQuery.toString()}`)
+      if (!returnResponse.ok) return null
+
+      const returnData = await returnResponse.json()
+      const returnFlights = returnData.outboundFlights ?? returnData.flights ?? []
+      const cheapestPair = getCheapestRoundTripPrice(outboundFlights, returnFlights)
+      if (!cheapestPair) return null
+
+      return {
+        departDate: date,
+        returnDate: retDate,
+        totalPriceTwd: cheapestPair.totalPriceTwd,
+        label: `${date} 出發，${retDate} 回程`,
+      }
+    }),
+  )
+
+  return results.filter(Boolean).sort((a, b) => a.totalPriceTwd - b.totalPriceTwd)
+}
+
+function getCheapestRoundTripPrice(outboundFlights, returnFlights) {
+  if (outboundFlights.length === 0 || returnFlights.length === 0) {
+    return null
+  }
+
+  const cheapestOutbound = outboundFlights[0]
+  const cheapestReturn = returnFlights[0]
+
+  return {
+    outboundPriceTwd: Number(cheapestOutbound.priceTwd ?? 0),
+    returnPriceTwd: Number(cheapestReturn.priceTwd ?? 0),
+    totalPriceTwd: Number(cheapestOutbound.priceTwd ?? 0) + Number(cheapestReturn.priceTwd ?? 0),
+  }
+}
+
 function getRoutePricing(origin, destination) {
   const japanAirport = japanAirports.find((airport) =>
     [origin.airport, destination.airport].includes(airport.airport),
@@ -102,6 +217,22 @@ function buildFallbackFlights({ origin, destination, cabin, date, direction = 'o
 function formatTotalPrice(outbound, returning) {
   const total = Number(outbound?.priceTwd ?? 0) + Number(returning?.priceTwd ?? 0)
   return `NT$ ${total.toLocaleString()}`
+}
+
+function toAiTrips({ outboundFlights, returnFlights, tripType }) {
+  if (tripType === '來回') {
+    const pairCount = Math.min(outboundFlights.length, returnFlights.length)
+    return Array.from({ length: pairCount }).map((_, index) => ({
+      outbound: outboundFlights[index],
+      returning: returnFlights[index],
+      totalPriceTwd: Number(outboundFlights[index]?.priceTwd ?? 0) + Number(returnFlights[index]?.priceTwd ?? 0),
+    }))
+  }
+
+  return outboundFlights.map((flight) => ({
+    outbound: flight,
+    totalPriceTwd: Number(flight.priceTwd ?? 0),
+  }))
 }
 
 function FlightLine({ flight, label }) {
@@ -183,6 +314,13 @@ function App() {
   const [showAllResults, setShowAllResults] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [searchNotice, setSearchNotice] = useState('')
+  const [aiRecommendation, setAiRecommendation] = useState('')
+  const [aiError, setAiError] = useState('')
+  const [isAiLoading, setIsAiLoading] = useState(false)
+  const [aiQuestion, setAiQuestion] = useState('')
+  const [isCheapestLoading, setIsCheapestLoading] = useState(false)
+  const [cheapestDates, setCheapestDates] = useState([])
+  const [cheapestError, setCheapestError] = useState('')
   const [searchForm, setSearchForm] = useState({
     from: '高雄 (KHH)',
     to: '東京 (NRT)',
@@ -194,17 +332,68 @@ function App() {
   function updateSearchForm(field, value) {
     setSearchError('')
     setSearchNotice('')
+    setAiRecommendation('')
+    setAiError('')
+    setCheapestDates([])
+    setCheapestError('')
     setSearchForm((current) => ({ ...current, [field]: value }))
   }
 
   function swapAirports() {
     setSearchError('')
     setSearchNotice('')
+    setAiRecommendation('')
+    setAiError('')
+    setCheapestDates([])
+    setCheapestError('')
     setSearchForm((current) => ({
       ...current,
       from: current.to,
       to: current.from,
     }))
+  }
+
+  async function handleFindCheapestDates() {
+    if (searchForm.from === searchForm.to) {
+      setCheapestError('出發地和目的地不能相同。')
+      return
+    }
+
+    if (!searchForm.departDate) {
+      setCheapestError('請先選擇出發日期，作為便宜日期搜尋範圍的起點。')
+      return
+    }
+
+    setCheapestError('')
+    setCheapestDates([])
+    setIsCheapestLoading(true)
+
+    const origin = findAirport(searchForm.from)
+    const destination = findAirport(searchForm.to)
+
+    try {
+      const ranked = (
+        await fetchCheapestDatesData({
+          origin,
+          destination,
+          departDate: searchForm.departDate,
+          returnDate: searchForm.returnDate,
+          tripTypeCurrent: tripType,
+          cabinCurrent: cabin,
+        })
+      ).slice(0, 5)
+
+      if (ranked.length === 0) {
+        setCheapestError('目前在這段期間找不到可用票價，請調整日期範圍再試一次。')
+        return
+      }
+
+      setCheapestDates(ranked)
+    } catch {
+      setCheapestError('便宜日期搜尋失敗，請確認本機 API 有啟動後再試一次。')
+    } finally {
+      setIsCheapestLoading(false)
+    }
   }
 
   async function handleSearch(event) {
@@ -231,6 +420,8 @@ function App() {
 
     setSearchError('')
     setSearchNotice('')
+    setAiRecommendation('')
+    setAiError('')
     setShowAllResults(false)
     setIsSearching(true)
     setHasSearched(false)
@@ -304,6 +495,78 @@ function App() {
     : tripResults.outboundFlights.length
   const hiddenFlightCount = Math.max(0, totalResultCount - visiblePairCount)
   const tripDuration = getTripDuration(searchForm.departDate, searchForm.returnDate)
+  const canUseAi = hasSearched && visiblePairCount > 0
+
+  async function handleAiSubmit(event) {
+    event.preventDefault()
+
+    const visibleTrips = toAiTrips({
+      outboundFlights: outboundVisible,
+      returnFlights: returnVisible,
+      tripType,
+    })
+
+    if (!aiQuestion.trim()) {
+      setAiError('請先輸入你想問 AI 的問題。')
+      return
+    }
+
+    setIsAiLoading(true)
+    setAiError('')
+    setAiRecommendation('')
+
+    // 如果還沒搜尋但已設定路線與日期，自動抓便宜日期資料給 Gemini 參考
+    let autoCheapestDates = []
+    if (
+      visibleTrips.length === 0 &&
+      searchForm.from !== searchForm.to &&
+      searchForm.departDate
+    ) {
+      try {
+        const origin = findAirport(searchForm.from)
+        const destination = findAirport(searchForm.to)
+        autoCheapestDates = (
+          await fetchCheapestDatesData({
+            origin,
+            destination,
+            departDate: searchForm.departDate,
+            returnDate: searchForm.returnDate,
+            tripTypeCurrent: tripType,
+            cabinCurrent: cabin,
+          })
+        ).slice(0, 7)
+      } catch {
+        // 靜默失敗，Gemini 仍可回答一般問題
+      }
+    }
+
+    try {
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cabin,
+          routeSummary: `${searchForm.from} 到 ${searchForm.to}`,
+          travelers: searchForm.travelers,
+          tripType,
+          question: aiQuestion.trim(),
+          visibleTrips,
+          autoCheapestDates,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Gemini request failed')
+      }
+
+      const data = await response.json()
+      setAiRecommendation(data.recommendation ?? '')
+    } catch {
+      setAiError('AI 推薦暫時無法使用，請確認 GEMINI_API_KEY 是否已設定並重啟本機伺服器。')
+    } finally {
+      setIsAiLoading(false)
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -410,11 +673,68 @@ function App() {
                   <option>商務艙</option>
                 </select>
               </label>
+              <button
+                className="cheap-days-button"
+                type="button"
+                disabled={isCheapestLoading}
+                onClick={handleFindCheapestDates}
+              >
+                {isCheapestLoading ? '計算中' : '幫我找這段期間最便宜日期'}
+              </button>
             </div>
 
             {searchError && <p className="form-error">{searchError}</p>}
             {searchNotice && <p className="form-notice">{searchNotice}</p>}
           </form>
+        </section>
+
+        <section className="ai-panel ai-panel-main" aria-label="AI 對話框">
+          <div className="ai-panel-heading">
+            <p>Gemini AI</p>
+            <h3>AI 對話框</h3>
+            <span>
+              {canUseAi
+                ? '已載入航班資料，你可以問任何問題，例如哪組最便宜、行李規定、日本簽證等。'
+                : searchForm.departDate && searchForm.from !== searchForm.to
+                  ? 'AI 會自動查詢這段期間票價，直接問「哪天最便宜」或「幫我規劃行程」就可以。'
+                  : '選好出發地、目的地與日期後，AI 可以直接幫你找便宜時段並規劃行程。'}
+            </span>
+          </div>
+          <form className="ai-chat-form" onSubmit={handleAiSubmit}>
+            <textarea
+              disabled={isAiLoading}
+              onChange={(event) => {
+                setAiQuestion(event.target.value)
+                setAiError('')
+              }}
+              placeholder="問任何問題，例如：哪天最便宜？日本需要簽證嗎？現在匯率如何？"
+              rows="3"
+              value={aiQuestion}
+            />
+            <button
+              className="ai-button"
+              disabled={isAiLoading || !aiQuestion.trim()}
+              type="submit"
+            >
+              {isAiLoading ? '回覆中' : '送出'}
+            </button>
+          </form>
+          {aiError && <p className="ai-error">{aiError}</p>}
+          {aiRecommendation && <div className="ai-recommendation">{aiRecommendation}</div>}
+          {cheapestError && <p className="ai-error">{cheapestError}</p>}
+          {cheapestDates.length > 0 && (
+            <div className="cheap-days-panel">
+              <h4>這段期間最便宜日期</h4>
+              <ol>
+                {cheapestDates.map((item) => (
+                  <li key={`${item.departDate}-${item.returnDate ?? 'oneway'}`}>
+                    <span>{item.label}</span>
+                    <strong>NT$ {item.totalPriceTwd.toLocaleString()}</strong>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </section>
 
         {hasSearched && (
