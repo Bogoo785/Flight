@@ -99,6 +99,22 @@
   transform: translateY(-1px);
 }
 
+.results-toggle {
+  width: 100%;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px;
+}
+
+.results-toggle:hover {
+  background: #dbeafe;
+}
+
 .empty-results {
   border: 1px dashed #cbd5e1;
   border-radius: 8px;

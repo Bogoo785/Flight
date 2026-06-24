@@ -85,6 +85,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [flightResults, setFlightResults] = useState([])
+  const [showAllResults, setShowAllResults] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [searchNotice, setSearchNotice] = useState('')
   const [geminiPrompt, setGeminiPrompt] = useState('')
@@ -115,6 +116,7 @@ function App() {
 
     setSearchError('')
     setSearchNotice('')
+    setShowAllResults(false)
     setIsSearching(true)
     setHasSearched(false)
 
@@ -159,22 +161,11 @@ function App() {
     setGeminiStatus('已收到你的條件。之後接上 Gemini 後，推薦結果會顯示在這裡。')
   }
 
+  const visibleFlightResults = showAllResults ? flightResults : flightResults.slice(0, 5)
+  const hiddenFlightCount = Math.max(0, flightResults.length - visibleFlightResults.length)
+
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-[#172033]">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[900px] items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-[#1f6feb] text-sm font-semibold text-white">
-              FP
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-950">FlightPlan AI</p>
-              <p className="text-xs text-slate-500">機票搜尋與 Gemini 預留</p>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-[900px] px-4 py-6 sm:px-6">
         <section id="search" className="panel">
           <div className="mb-5">
@@ -326,7 +317,7 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {flightResults.map((flight) => (
+                  {visibleFlightResults.map((flight) => (
                     <button className="flight-result-card" key={flight.flightId} type="button">
                       <div>
                         <p className="font-semibold text-slate-950">
@@ -340,6 +331,15 @@ function App() {
                       <p className="text-lg font-semibold text-slate-950">{flight.price}</p>
                     </button>
                   ))}
+                  {flightResults.length > 5 && (
+                    <button
+                      className="results-toggle"
+                      onClick={() => setShowAllResults((current) => !current)}
+                      type="button"
+                    >
+                      {showAllResults ? '收合航班' : `展開全部航班（還有 ${hiddenFlightCount} 筆）`}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
