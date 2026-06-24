@@ -4,9 +4,10 @@ import path from 'node:path'
 const outputDir = path.resolve('outputs')
 const csvPath = path.join(outputDir, 'taiwan_japan_flights_seed_700.csv')
 const xlsxPath = path.join(outputDir, 'taiwan_japan_flights_seed_700.xlsx')
+const rowTarget = 4200
 
 const startDate = new Date('2026-06-24T00:00:00')
-const endDate = new Date('2026-09-24T00:00:00')
+const endDate = new Date('2026-12-24T00:00:00')
 
 const origins = [
   {
@@ -172,9 +173,74 @@ function buildFlightNumber(airline, destination, origin, rowIndex) {
   return `${airline.code}${String(serial).padStart(3, '0')}`
 }
 
+function buildRow(origin, destination, airline, cabin, flightDate, rowIndex) {
+  const departureTime = pick(departureTimes)
+  const delayBuffer = Math.floor(random() * 21) - 5
+  const durationMinutes = destination.duration + (origin.airportCode === 'KHH' ? 8 : 0) + delayBuffer
+  const departureDateTime = addMinutesToDate(flightDate, departureTime, 0)
+  const arrivalDateTime = addMinutesToDate(flightDate, departureTime, durationMinutes)
+  const dayOfWeek = departureDateTime.getDay()
+  const weekendOffset = dayOfWeek === 0 || dayOfWeek === 6 ? 700 : 0
+  const demandOffset = Math.floor(random() * 1800)
+  const priceTwd = Math.round(
+    ((destination.basePrice + origin.priceOffset + airline.priceOffset + weekendOffset + demandOffset) *
+      cabin.multiplier) /
+      10,
+  ) * 10
+  const seatsTotal = cabin.value === 'business' ? 20 : cabin.value === 'premium_economy' ? 36 : 180
+  const seatsAvailable = Math.max(0, Math.floor(seatsTotal * cabin.seatsRatio * random()))
+  const status = pick(statuses)
+  const flightNumber = buildFlightNumber(airline, destination, origin, rowIndex)
+
+  return {
+    flight_id: rowIndex + 1,
+    route_code: `${origin.airportCode}-${destination.airportCode}`,
+    airline_code: airline.code,
+    airline_name: airline.name,
+    flight_number: flightNumber,
+    origin_city: origin.city,
+    origin_airport_code: origin.airportCode,
+    origin_airport_name: origin.airportName,
+    destination_city: destination.city,
+    destination_airport_code: destination.airportCode,
+    destination_airport_name: destination.airportName,
+    flight_date: formatDate(flightDate),
+    departure_time: formatTime(departureDateTime),
+    arrival_time: formatTime(arrivalDateTime),
+    departure_datetime: formatDateTime(departureDateTime),
+    arrival_datetime: formatDateTime(arrivalDateTime),
+    duration_minutes: durationMinutes,
+    stops: 0,
+    cabin_class: cabin.value,
+    price_twd: priceTwd,
+    currency: 'TWD',
+    seats_total: seatsTotal,
+    seats_available: seatsAvailable,
+    baggage_kg: airline.baggageKg,
+    status,
+    source_type: 'fake_seed',
+    created_at: '2026-06-24 00:00:00',
+    updated_at: '2026-06-24 00:00:00',
+  }
+}
+
 function makeRows(count) {
   const rows = []
   const totalDays = daysBetween(startDate, endDate)
+
+  for (const origin of origins) {
+    for (const destination of destinations) {
+      for (const cabin of cabinClasses) {
+        const routeAirlines = airlines.filter((airline) => airline.destinations.includes(destination.airportCode))
+
+        for (let offset = 0; offset <= totalDays; offset += 10) {
+          const airline = routeAirlines[Math.floor(offset / 10) % routeAirlines.length]
+          rows.push(buildRow(origin, destination, airline, cabin, addDays(startDate, offset), rows.length))
+        }
+      }
+    }
+  }
+
   let routeCursor = 0
 
   while (rows.length < count) {
@@ -186,54 +252,7 @@ function makeRows(count) {
     const destination = availableDestinations[Math.floor(routeCursor / (origins.length * airlines.length)) % availableDestinations.length]
     const cabin = pick(cabinClasses)
     const flightDate = addDays(startDate, Math.floor(random() * (totalDays + 1)))
-    const departureTime = pick(departureTimes)
-    const delayBuffer = Math.floor(random() * 21) - 5
-    const durationMinutes = destination.duration + (origin.airportCode === 'KHH' ? 8 : 0) + delayBuffer
-    const departureDateTime = addMinutesToDate(flightDate, departureTime, 0)
-    const arrivalDateTime = addMinutesToDate(flightDate, departureTime, durationMinutes)
-    const dayOfWeek = departureDateTime.getDay()
-    const weekendOffset = dayOfWeek === 0 || dayOfWeek === 6 ? 700 : 0
-    const demandOffset = Math.floor(random() * 1800)
-    const priceTwd = Math.round(
-      ((destination.basePrice + origin.priceOffset + airline.priceOffset + weekendOffset + demandOffset) *
-        cabin.multiplier) /
-        10,
-    ) * 10
-    const seatsTotal = cabin.value === 'business' ? 20 : cabin.value === 'premium_economy' ? 36 : 180
-    const seatsAvailable = Math.max(0, Math.floor(seatsTotal * cabin.seatsRatio * random()))
-    const status = pick(statuses)
-    const flightNumber = buildFlightNumber(airline, destination, origin, rows.length)
-
-    rows.push({
-      flight_id: rows.length + 1,
-      route_code: `${origin.airportCode}-${destination.airportCode}`,
-      airline_code: airline.code,
-      airline_name: airline.name,
-      flight_number: flightNumber,
-      origin_city: origin.city,
-      origin_airport_code: origin.airportCode,
-      origin_airport_name: origin.airportName,
-      destination_city: destination.city,
-      destination_airport_code: destination.airportCode,
-      destination_airport_name: destination.airportName,
-      flight_date: formatDate(flightDate),
-      departure_time: formatTime(departureDateTime),
-      arrival_time: formatTime(arrivalDateTime),
-      departure_datetime: formatDateTime(departureDateTime),
-      arrival_datetime: formatDateTime(arrivalDateTime),
-      duration_minutes: durationMinutes,
-      stops: 0,
-      cabin_class: cabin.value,
-      price_twd: priceTwd,
-      currency: 'TWD',
-      seats_total: seatsTotal,
-      seats_available: seatsAvailable,
-      baggage_kg: airline.baggageKg,
-      status,
-      source_type: 'fake_seed',
-      created_at: '2026-06-24 00:00:00',
-      updated_at: '2026-06-24 00:00:00',
-    })
+    rows.push(buildRow(origin, destination, airline, cabin, flightDate, rows.length))
 
     routeCursor += 1
   }
@@ -326,8 +345,8 @@ function sheetXml(name, rows) {
 function notesXml() {
   const rows = [
     ['item', 'value'],
-    ['date_range', '2026-06-24 to 2026-09-24'],
-    ['row_count', '700'],
+    ['date_range', '2026-06-24 to 2026-12-24'],
+    ['row_count', String(rowTarget)],
     ['usage', 'Fake seed data for Neon/PostgreSQL import. Use the CSV for easiest import.'],
     ['suggested_table', 'flights'],
     ['source_note', 'Routes are mock data inspired by Taiwan-Japan route patterns; not live fares or schedules.'],
@@ -517,7 +536,7 @@ function writeXlsx(rows) {
 }
 
 fs.mkdirSync(outputDir, { recursive: true })
-const rows = makeRows(700)
+const rows = makeRows(rowTarget)
 writeCsv(rows)
 writeXlsx(rows)
 

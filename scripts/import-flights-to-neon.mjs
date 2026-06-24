@@ -70,6 +70,28 @@ function normalizeValue(header, value) {
   return value
 }
 
+async function insertRows(client, headers, rows, batchSize = 1000) {
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batch = rows.slice(start, start + batchSize)
+    const values = []
+    const placeholders = batch.map((row, rowIndex) => {
+      const cells = headers.map((header, columnIndex) => {
+        values.push(normalizeValue(header, row[header]))
+        return `$${rowIndex * headers.length + columnIndex + 1}`
+      })
+      return `(${cells.join(', ')})`
+    })
+
+    await client.query(
+      `
+      INSERT INTO flights (${headers.join(', ')})
+      VALUES ${placeholders.join(',\n')}
+      `,
+      values,
+    )
+  }
+}
+
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -86,22 +108,7 @@ try {
   await client.query('DROP TABLE IF EXISTS flights CASCADE')
   await client.query(schema)
 
-  const values = []
-  const placeholders = rows.map((row, rowIndex) => {
-    const cells = headers.map((header, columnIndex) => {
-      values.push(normalizeValue(header, row[header]))
-      return `$${rowIndex * headers.length + columnIndex + 1}`
-    })
-    return `(${cells.join(', ')})`
-  })
-
-  await client.query(
-    `
-    INSERT INTO flights (${headers.join(', ')})
-    VALUES ${placeholders.join(',\n')}
-    `,
-    values,
-  )
+  await insertRows(client, headers, rows)
 
   await client.query('COMMIT')
   console.log(`Imported ${rows.length} rows into flights.`)
